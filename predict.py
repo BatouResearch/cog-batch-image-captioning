@@ -21,7 +21,7 @@ SUPPORTED_IMAGE_TYPES = (".png", ".jpg", ".jpeg", ".webp")
 
 class Predictor(BasePredictor):
     def setup(self):
-        self.temp_folder = tempfile.TemporaryDirectory(delete=False)
+        pass
 
     def predict(
             self,
@@ -125,7 +125,8 @@ Good examples are:
             system_prompt,
             message_prompt,
     ) -> Path:
-
+        temp_folder = tempfile.TemporaryDirectory(delete=False)
+        
         if model.startswith("gpt"):
             if not openai_api_key:
                 raise ValueError("OpenAI API key is required for GPT models")
@@ -144,15 +145,15 @@ Good examples are:
         if not (model.startswith("gpt") or model.startswith("claude") or model.startswith("gemini")):
             raise ValueError("Model type is not supported")
 
-        await self.extract_images_from_zip(image_zip_archive, SUPPORTED_IMAGE_TYPES)
+        await self.extract_images_from_zip(image_zip_archive, SUPPORTED_IMAGE_TYPES, temp_folder)
 
         original_images = []
         if include_images:
-            supported_images = [filename for filename in os.listdir(self.temp_folder.name)
+            supported_images = [filename for filename in os.listdir(temp_folder.name)
                                 if filename.lower().endswith(SUPPORTED_IMAGE_TYPES)]
             for filename in supported_images:
-                image_path = os.path.join(self.temp_folder.name, filename)
-                new_path = os.path.join(self.temp_folder.name, f"original_{filename}")
+                image_path = os.path.join(temp_folder.name, filename)
+                new_path = os.path.join(temp_folder.name, f"original_{filename}")
                 shutil.copy(image_path, new_path)
                 original_images.append(f"original_{filename}")
             del supported_images
@@ -160,13 +161,13 @@ Good examples are:
         captioning_requests = []
         results = []
         errors = []
-        csv_path = os.path.join(self.temp_folder.name, "captions.csv")
+        csv_path = os.path.join(temp_folder.name, "captions.csv")
         with open(csv_path, "w", newline="") as csvfile:
             csvwriter = csv.writer(csvfile)
             csvwriter.writerow(["caption", "image_file"])
 
             images = self.process_images(
-                original_images, resize_images_for_captioning, max_dimension
+                original_images, resize_images_for_captioning, max_dimension, temp_folder
             )
             for image_path in images:
                 captioning_requests.append(
@@ -191,14 +192,14 @@ Good examples are:
             end_time = time.time()
             print(f"Caption completed in {end_time - start_time:.2f} seconds")
 
-            images = [filename for filename in os.listdir(self.temp_folder.name)
+            images = [filename for filename in os.listdir(temp_folder.name)
                       if filename.lower().endswith(SUPPORTED_IMAGE_TYPES) and
                       filename not in original_images
                       ]
 
             for filename, caption in zip(images, responses):
                 txt_filename = os.path.splitext(filename)[0] + ".txt"
-                txt_path = os.path.join(self.temp_folder.name, txt_filename)
+                txt_path = os.path.join(temp_folder.name, txt_filename)
                 with open(txt_path, "w") as txt_file:
                     txt_file.write(caption)
 
@@ -211,7 +212,7 @@ Good examples are:
 
         output_zip_path = "/tmp/captions_and_csv.zip"
         with zipfile.ZipFile(output_zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
-            for root, dirs, files in os.walk(self.temp_folder.name):
+            for root, dirs, files in os.walk(temp_folder.name):
                 root_path = os.path.abspath(root)  # Cache root path
                 for file in files:
                     file_path = os.path.join(root_path, file)
@@ -232,12 +233,12 @@ Good examples are:
         del errors
 
         gc.collect()
-        self.temp_folder.cleanup()
+        temp_folder.cleanup()
         return Path(output_zip_path)
 
-    async def download_zip(self, url):
+    async def download_zip(self, url, temp_folder):
         """Download the zip file asynchronously using aiohttp."""
-        temp_zip_path = os.path.join(self.temp_folder.name, "downloaded_zipfile.zip")
+        temp_zip_path = os.path.join(temp_folder.name, "downloaded_zipfile.zip")
         ssl_context = ssl.create_default_context(cafile=certifi.where())
         conn = aiohttp.TCPConnector(ssl=ssl_context)
         start_time = time.time()
@@ -258,7 +259,7 @@ Good examples are:
         return temp_zip_path
 
     async def extract_images_from_zip(
-            self, image_zip_archive: str, supported_image_types: tuple
+            self, image_zip_archive: str, supported_image_types: tuple, temp_folder
     ):
 
         with zipfile.ZipFile(image_zip_archive, "r") as zip_ref:
@@ -268,16 +269,16 @@ Good examples are:
                         not os.path.basename(file).startswith("._")):
                     filename = os.path.basename(file)
                     source = zip_ref.open(file)
-                    target_path = os.path.join(self.temp_folder.name, filename)
+                    target_path = os.path.join(temp_folder.name, filename)
                     with open(target_path, "wb") as target:
                         shutil.copyfileobj(source, target, length=1024 * 256)
                     del source, filename, target_path
                     gc.collect()
 
-    def process_images(self, original_images, resize_images_for_captioning: bool, max_dimension: int):
+    def process_images(self, original_images, resize_images_for_captioning: bool, max_dimension: int, temp_folder):
         """Process images concurrently, resizing if necessary."""
         supported_images = [
-            filename for filename in os.listdir(self.temp_folder.name)
+            filename for filename in os.listdir(temp_folder.name)
             if filename.lower().endswith(SUPPORTED_IMAGE_TYPES) and filename not in original_images
         ]
 
@@ -285,7 +286,7 @@ Good examples are:
             with ThreadPoolExecutor(max_workers=2) as executor:
                 futures = []
                 for filename in supported_images:
-                    image_path = os.path.join(self.temp_folder.name, filename)
+                    image_path = os.path.join(temp_folder.name, filename)
                     futures.append(executor.submit(self.resize_image, image_path, max_dimension))
 
                 resized_images = [future.result() for future in futures]
