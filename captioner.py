@@ -87,6 +87,7 @@ class Captioner(ImageOperation):
             )
 
             processed_images = sorted(processed_images)
+
             for image_path in processed_images:
                 print(f" - Captioning {image_path}")
                 captioning_requests.append(
@@ -215,10 +216,11 @@ class Captioner(ImageOperation):
 
                 img = img.resize((new_width, new_height), Image.LANCZOS)
 
+            os.unlink(image_path)
             jpeg_image_path = image_path.rsplit('.', 1)[0] + ".jpeg"
             img = img.convert('RGB')
             img.save(jpeg_image_path, "JPEG", quality=90)
-            os.unlink(image_path)
+            
 
         img = None
         gc.collect()
