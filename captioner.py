@@ -54,8 +54,9 @@ class Captioner(ImageOperation):
         )
 
     async def _predict_async(self) -> Path:
+        
         temp_folder = tempfile.TemporaryDirectory(delete=False)
-
+        
         await self._extract_images_from_zip(self.parameters.get("image_zip_archive"), SUPPORTED_IMAGE_TYPES, temp_folder)
 
         original_images = []
@@ -85,6 +86,7 @@ class Captioner(ImageOperation):
             )
 
             for image_path in processed_images:
+                print(f" - Captioning {image_path}")
                 captioning_requests.append(
                     self._generate_caption(
                         image_path,
@@ -160,13 +162,15 @@ class Captioner(ImageOperation):
     ):
 
         with zipfile.ZipFile(image_zip_archive, "r") as zip_ref:
+            idx = 0
             for file in zip_ref.namelist():
                 if (file.lower().endswith(supported_image_types) and
                         not file.startswith("__MACOSX/") and
                         not os.path.basename(file).startswith("._")):
+                    idx += 1
                     filename = os.path.basename(file)
                     source = zip_ref.open(file)
-                    target_path = os.path.join(temp_folder.name, filename)
+                    target_path = os.path.join(temp_folder.name, f"Image_{idx}.{filename.split(".")[-1]}")
                     with open(target_path, "wb") as target:
                         shutil.copyfileobj(source, target, length=1024 * 256)
                     del source, filename, target_path
@@ -212,6 +216,7 @@ class Captioner(ImageOperation):
             jpeg_image_path = image_path.rsplit('.', 1)[0] + ".jpeg"
             img = img.convert('RGB')
             img.save(jpeg_image_path, "JPEG", quality=90)
+            os.unlink(image_path)
 
         img = None
         gc.collect()
