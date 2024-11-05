@@ -63,6 +63,7 @@ class Captioner(ImageOperation):
         if self.parameters.get("include_images"):
             supported_images = [filename for filename in os.listdir(temp_folder.name)
                                 if filename.lower().endswith(SUPPORTED_IMAGE_TYPES)]
+
             for filename in supported_images:
                 image_path = os.path.join(temp_folder.name, filename)
                 new_path = os.path.join(temp_folder.name, f"original_{filename}")
@@ -85,6 +86,7 @@ class Captioner(ImageOperation):
                 temp_folder
             )
 
+            processed_images = sorted(processed_images)
             for image_path in processed_images:
                 print(f" - Captioning {image_path}")
                 captioning_requests.append(
@@ -112,7 +114,7 @@ class Captioner(ImageOperation):
                       if filename.lower().endswith(SUPPORTED_IMAGE_TYPES) and
                       filename not in original_images
                       ]
-
+            images = sorted(images)
             for filename, caption in zip(images, responses):
                 txt_filename = os.path.splitext(filename)[0] + ".txt"
                 txt_path = os.path.join(temp_folder.name, txt_filename)
